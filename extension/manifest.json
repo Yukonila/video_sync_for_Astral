@@ -1,0 +1,33 @@
+{
+    "manifest_version": 3,
+    "name": "Video Sync",
+    "version": "2.0.0",
+    "description": "跨设备同步视频播放，需自备服务器",
+    "minimum_chrome_version": "116",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "tabs"
+    ],
+    "host_permissions": [
+        "ws://*/*",
+        "wss://*/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    }
+}
