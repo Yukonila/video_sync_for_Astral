@@ -10,6 +10,39 @@ async function getConfig() {
     return { serverUrl: (serverUrl || "").trim(), roomId: (roomId || "").trim() };
 }
 
+// 判断两个 URL 是否指向同一个视频（针对 B 站优化）
+function isSameVideo(url1, url2) {
+    if (!url1 || !url2) return false;
+
+    try {
+        const a = new URL(url1);
+        const b = new URL(url2);
+
+        // B 站特殊处理
+        if (a.hostname.includes("bilibili.com") && b.hostname.includes("bilibili.com")) {
+            const bvA = a.pathname.match(/\/(BV[0-9A-Za-z]+)/);
+            const bvB = b.pathname.match(/\/(BV[0-9A-Za-z]+)/);
+            const avA = a.pathname.match(/\/av(\d+)/);
+            const avB = b.pathname.match(/\/av(\d+)/);
+
+            const idA = bvA ? bvA[1] : (avA ? "av" + avA[1] : null);
+            const idB = bvB ? bvB[1] : (avB ? "av" + avB[1] : null);
+
+            if (!idA || !idB) return false;
+            if (idA !== idB) return false;
+
+            const pA = a.searchParams.get("p") || "1";
+            const pB = b.searchParams.get("p") || "1";
+            return pA === pB;
+        }
+
+        // 其他网站：origin + pathname 相同即可
+        return a.origin === b.origin && a.pathname === b.pathname;
+    } catch {
+        return url1 === url2;
+    }
+}
+
 async function connect() {
     const { serverUrl, roomId } = await getConfig();
     currentServerUrl = serverUrl;
@@ -36,7 +69,7 @@ async function connect() {
 
     ws.onopen = () => {
         console.log("WS connected");
-        reconnectAttempts = 0;           // 连接成功，重置退避计数
+        reconnectAttempts = 0;
         ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
         startKeepalive();
     };
@@ -47,9 +80,21 @@ async function connect() {
         if (data.type === "pong" || data.type === "joined") return;
 
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0]) {
-                chrome.tabs.sendMessage(tabs[0].id, data).catch(() => { });
+            if (!tabs[0]) return;
+            const currentUrl = tabs[0].url || "";
+
+            // 对方发来的 URL 和当前页不是同一个视频，弹提示
+            if (data.url && currentUrl && !isSameVideo(data.url, currentUrl)) {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    type: "show-open-hint",
+                    url: data.url,
+                    title: data.title
+                }).catch(() => { });
+                return;
             }
+
+            // 同一个视频（或对方没带 url），正常同步播放状态
+            chrome.tabs.sendMessage(tabs[0].id, data).catch(() => { });
         });
     };
 
@@ -66,15 +111,11 @@ async function connect() {
 
 function startKeepalive() {
     stopKeepalive();
-
-    // 每 20 秒做两件事：
-    // 1. 发 WebSocket ping，保持连接活跃
-    // 2. 调一次 chrome.runtime.getPlatformInfo，
-    //    这是 Chrome 官方推荐的方式，能重置 Service Worker 的 30 秒空闲计时器
     keepaliveTimer = setInterval(() => {
         if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
         }
+        // 官方推荐的保活方式，重置 Service Worker 空闲计时器
         chrome.runtime.getPlatformInfo(() => { });
     }, 20000);
 }
@@ -86,7 +127,6 @@ function stopKeepalive() {
 function scheduleReconnect() {
     if (reconnectTimer) return;
 
-    // 指数退避：2s, 4s, 8s, 16s, 最多 30s
     const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 30000);
     reconnectAttempts++;
 
@@ -119,5 +159,4 @@ chrome.tabs.onActivated.addListener(() => {
     if (ws?.readyState !== WebSocket.OPEN) connect();
 });
 
-// Service Worker 启动时自动连接
 connect();
