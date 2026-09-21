@@ -3,6 +3,7 @@ let reconnectTimer = null;
 let keepaliveTimer = null;
 let currentRoomId = null;
 let currentServerUrl = null;
+let reconnectAttempts = 0;
 
 async function getConfig() {
     const { serverUrl, roomId } = await chrome.storage.local.get(["serverUrl", "roomId"]);
@@ -14,7 +15,6 @@ async function connect() {
     currentServerUrl = serverUrl;
     currentRoomId = roomId;
 
-    // 必须同时有服务器地址和房间号才连接
     if (!serverUrl || !roomId) {
         console.log("Config incomplete, not connecting");
         return;
@@ -36,6 +36,7 @@ async function connect() {
 
     ws.onopen = () => {
         console.log("WS connected");
+        reconnectAttempts = 0;           // 连接成功，重置退避计数
         ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
         startKeepalive();
     };
@@ -65,10 +66,16 @@ async function connect() {
 
 function startKeepalive() {
     stopKeepalive();
+
+    // 每 20 秒做两件事：
+    // 1. 发 WebSocket ping，保持连接活跃
+    // 2. 调一次 chrome.runtime.getPlatformInfo，
+    //    这是 Chrome 官方推荐的方式，能重置 Service Worker 的 30 秒空闲计时器
     keepaliveTimer = setInterval(() => {
         if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
         }
+        chrome.runtime.getPlatformInfo(() => { });
     }, 20000);
 }
 
@@ -78,10 +85,16 @@ function stopKeepalive() {
 
 function scheduleReconnect() {
     if (reconnectTimer) return;
+
+    // 指数退避：2s, 4s, 8s, 16s, 最多 30s
+    const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 30000);
+    reconnectAttempts++;
+
+    console.log(`Reconnect in ${delay}ms (attempt ${reconnectAttempts})`);
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connect();
-    }, 2000);
+    }, delay);
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -96,6 +109,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
     }
     if (msg.type === "config-updated") {
+        reconnectAttempts = 0;
         connect();
     }
     return true;
@@ -105,5 +119,5 @@ chrome.tabs.onActivated.addListener(() => {
     if (ws?.readyState !== WebSocket.OPEN) connect();
 });
 
-// Service Worker 启动时尝试自动连接
+// Service Worker 启动时自动连接
 connect();

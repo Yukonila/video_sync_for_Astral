@@ -4,10 +4,8 @@ const os = require("os");
 const PORT = process.env.PORT || 3000;
 const wss = new WebSocket.Server({ port: PORT });
 
-// 房间号 -> Set<WebSocket>
 const rooms = new Map();
 
-// 打印本机所有 IPv4 地址，方便你确认该填哪个
 function getLocalIPs() {
     const nets = os.networkInterfaces();
     const ips = [];
@@ -29,8 +27,12 @@ for (const { iface, ip } of getLocalIPs()) {
     console.log(`  [${iface}] ${ip}`);
 }
 console.log("----------------------------------------");
-console.log("另一台机器请填：ws://<上面某个IP>:3000/ws");
-console.log("本机自己请填：  ws://127.0.0.1:3000/ws");
+console.log("扩展里填写服务器地址时，格式如下（注意不要带尖括号）：");
+console.log("  另一台机器：ws://<Astral虚拟IP>:3000/ws");
+console.log("  本机自己：  ws://127.0.0.1:3000/ws");
+console.log("");
+console.log("举例：如果 Astral 虚拟 IP 是 10.126.126.1，就填");
+console.log("  ws://10.126.126.1:3000/ws");
 console.log("========================================");
 
 wss.on("connection", (ws, req) => {
@@ -44,20 +46,17 @@ wss.on("connection", (ws, req) => {
     const peers = rooms.get(roomId);
     console.log(`[+] room=${roomId} 当前连接数=${peers.size}`);
 
-    // 通知客户端已加入
     ws.send(JSON.stringify({ type: "joined", room: roomId }));
 
     ws.on("message", (raw) => {
         let data;
         try { data = JSON.parse(raw); } catch { return; }
 
-        // 心跳：直接回 pong，不走广播
         if (data.type === "ping") {
             ws.send(JSON.stringify({ type: "pong", t: data.t }));
             return;
         }
 
-        // 广播给同房间其他连接
         const out = raw.toString();
         for (const peer of peers) {
             if (peer !== ws && peer.readyState === WebSocket.OPEN) {
