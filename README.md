@@ -22,8 +22,33 @@
 
 - 两台 Windows 电脑
 - 每台安装 Chrome 116 或更高版本
-- 每台安装 [Astral](https://astral.sh/)（或类似的虚拟组网工具），并加入同一个虚拟网络
+- 每台安装 [Astral](https://github.com/ldoubil/astral)（基于 EasyTier 的跨平台 P2P 虚拟组网工具），并加入同一个虚拟网络
 - **其中一台**安装 [Node.js](https://nodejs.org) 16 或更高版本（LTS 版即可）
+
+---
+
+## 〇、安装并配置 Astral（虚拟组网）
+
+本项目依赖 [Astral](https://github.com/ldoubil/astral) 把异地的机器拉进同一个虚拟局域网。它是基于 EasyTier 的跨平台 P2P 组网工具，支持 Windows / macOS / Linux / Android / iOS。
+
+### 下载
+
+前往 [Releases 页面](https://github.com/ldoubil/astral/releases) 下载对应平台的安装包（当前最新版本 `v2.9.60`）：
+
+- **Windows**：`astral-windows-x64-setup.exe`
+- **macOS**：`astral-macos-x64.dmg` / `astral-macos-arm64.dmg`
+- **Linux**：`.deb` / `.rpm` / `.tar.gz`（按 CPU 架构选择 x64 或 arm64）
+- **Android / iOS**：对应的 `.apk` 或应用商店版本
+
+### 使用
+
+1. 在每台设备上安装并打开 Astral
+2. 在其中一台上**创建房间**，记下房间号 / 邀请信息
+3. 其他设备**加入同一个房间**
+4. 加入成功后，每台设备会被分配到一个虚拟 IP（在 Astral 界面里可看到），互相 `ping` 得通即可
+5. 把这个虚拟 IP 填到扩展的「服务器地址」中（详见后面的「三、配置扩展」）
+
+> 虚拟 IP 一般形如 `10.x.x.x`。服务器那台启动后，日志里也会打印以 `[astral]` 开头的 IP，两边对一下就知道该填哪个了。
 
 ---
 
@@ -283,3 +308,8 @@ netstat -an | findstr 3000
 - **通信**：WebSocket（局域网 / Astral 虚拟网络内使用 `ws://`）
 
 ---
+
+## 致谢
+
+- 虚拟组网能力由 [Astral](https://github.com/ldoubil/astral)（基于 EasyTier）提供，感谢作者的开源与持续维护。
+- 感谢每一位用这个项目异地同步看片的朋友。
